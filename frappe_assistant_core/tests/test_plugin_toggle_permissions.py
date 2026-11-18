@@ -46,10 +46,14 @@ def _as_user(roles):
 
 class TestPluginTogglePermissions(BaseAssistantTest):
     def test_system_manager_cannot_switch_on_a_stored_plugin(self):
-        if not frappe.db.exists(DOCTYPE, "data_science"):
-            self.skipTest("plugin configurations are not synced on this site")
-        # Fresh installs store data_science disabled: enabled_plugins_list defaults to ["core"].
-        frappe.db.set_value(DOCTYPE, "data_science", "enabled", 0)
+        # Production: the install sync stores data_science disabled (enabled_plugins_list defaults
+        # to ["core"]). CI sites can lack the synced row, so store it the same way; rolled back.
+        if frappe.db.exists(DOCTYPE, "data_science"):
+            frappe.db.set_value(DOCTYPE, "data_science", "enabled", 0)
+        else:
+            frappe.get_doc({"doctype": DOCTYPE, "plugin_name": "data_science", "enabled": 0}).insert(
+                ignore_permissions=True
+            )
         doc = frappe.get_doc(DOCTYPE, "data_science")
         doc.enabled = 1
         with _as_user(["System Manager"]):
