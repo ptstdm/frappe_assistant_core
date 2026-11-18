@@ -29,6 +29,9 @@ from typing import Any, Dict, List, Optional
 
 import frappe
 
+from frappe_assistant_core.plugins.core.tools.report_tools import MAX_ROWS_CAP
+from frappe_assistant_core.utils import sandbox_frappe
+
 
 class FrappeAssistantAPI:
     """
@@ -146,6 +149,9 @@ class FrappeAssistantAPI:
                 - columns (list): Column definitions
                 - message (str): Status message
                 - status (str): "completed", "timeout", or "error"
+                - row_count (int): rows the report produced
+                - truncated (bool): True when row_count exceeds the 5000-row cap
+                  and data holds only the first rows plus the totals row
 
         Workflow Example:
             # For unknown reports, check requirements first
@@ -167,7 +173,7 @@ class FrappeAssistantAPI:
                 print(f"Top 10 customers: {top_customers}")
         """
         self._ensure_report_tools()
-        return self._report_tools.execute_report(report_name, filters or {}, format)
+        return self._report_tools.execute_report(report_name, filters or {}, format, max_rows=MAX_ROWS_CAP)
 
     # ========== DOCUMENT OPERATIONS ==========
 
@@ -191,13 +197,8 @@ class FrappeAssistantAPI:
                 print(f"Total: {invoice['data']['grand_total']}")
         """
         try:
-            if not frappe.has_permission(doctype, "read"):
-                return {"success": False, "error": f"No permission to read {doctype}"}
-
-            doc = frappe.get_doc(doctype, name)
-
-            # Convert frappe._dict to plain Python dict for pandas compatibility
-            data = dict(doc.as_dict())
+            # Plain dict for pandas compatibility
+            data = dict(sandbox_frappe.get_doc(doctype, name))
 
             return {"success": True, "data": data}
 
@@ -212,8 +213,10 @@ class FrappeAssistantAPI:
         self,
         doctype: str,
         filters: Optional[Dict[str, Any]] = None,
-        fields: Optional[List[str]] = None,
+        fields: Optional[List[Any]] = None,
         limit: int = 100,
+        order_by: Optional[str] = None,
+        group_by: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Get multiple documents with filters (permission-checked).
@@ -221,8 +224,12 @@ class FrappeAssistantAPI:
         Args:
             doctype: Document type (e.g., "Customer", "Item")
             filters: Filter dictionary (e.g., {"territory": "USA"})
-            fields: List of fields to fetch (default: ["*"] = all fields)
+            fields: List of fields to fetch (default: ["*"] = all fields). Link fields can be
+                followed with dot notation ("customer.territory"). Aggregates are written
+                {"SUM": "grand_total", "as": "total"} (COUNT, SUM, AVG, MIN, MAX).
             limit: Maximum records to return (default: 100)
+            order_by: e.g. "creation desc" or an aggregate alias, "total desc"
+            group_by: Field to group aggregates by (e.g. "customer")
 
         Returns:
             dict with:
@@ -241,12 +248,23 @@ class FrappeAssistantAPI:
             if result["success"]:
                 for customer in result["data"]:
                     print(f"{customer['customer_name']} - {customer['customer_group']}")
+
+            # Revenue per customer, summed in the database
+            result = tools.get_documents("Sales Invoice",
+                filters={"docstatus": 1},
+                fields=["customer", {"SUM": "grand_total", "as": "total"}],
+                group_by="customer",
+                order_by="total desc",
+                limit=10)
         """
         try:
-            if not frappe.has_permission(doctype, "read"):
-                return {"success": False, "error": f"No permission to read {doctype}"}
-
-            raw_data = frappe.get_all(doctype, filters=filters or {}, fields=fields or ["*"], limit=limit)
+            # sandbox_frappe.get_list enforces read permission; its PermissionError is mapped below.
+            list_kwargs = {"filters": filters or {}, "fields": fields or ["*"], "limit": limit}
+            if order_by:
+                list_kwargs["order_by"] = order_by
+            if group_by:
+                list_kwargs["group_by"] = group_by
+            raw_data = sandbox_frappe.get_list(doctype, **list_kwargs)
 
             # Convert frappe._dict objects to plain Python dicts for pandas compatibility
             # This prevents "invalid __array_struct__" errors when using with pandas
@@ -290,7 +308,7 @@ class FrappeAssistantAPI:
 
             # Use Frappe's built-in search
             if doctype:
-                results = frappe.get_all(
+                results = sandbox_frappe.get_list(
                     doctype,
                     filters=[["name", "like", f"%{query}%"]],
                     fields=["name"],
@@ -361,7 +379,112 @@ class FrappeAssistantAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # ========== MCP TOOL-NAME ALIASES ==========
+    # The model sees the MCP tool names and calls them on `tools`. Each alias hands
+    # its arguments to the MCP tool itself, so names, defaults and results match it.
+
+    def list_documents(
+        self,
+        doctype: str,
+        filters: Optional[Dict[str, Any]] = None,
+        fields: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        order_by: Optional[str] = None,
+        group_by: Optional[str] = None,
+        aggregate: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Same as the list_documents MCP tool (docstatus default, paging, group_by/aggregate).
+
+        Example:
+            result = tools.list_documents("Customer", filters={"territory": "USA"}, limit=50)
+        """
+        from frappe_assistant_core.plugins.core.tools.list_documents import DocumentList
+
+        return self._run_mcp_tool(
+            DocumentList,
+            doctype=doctype,
+            filters=filters,
+            fields=fields,
+            limit=limit,
+            offset=offset,
+            order_by=order_by,
+            group_by=group_by,
+            aggregate=aggregate,
+        )
+
+    def report_list(
+        self,
+        query: Optional[str] = None,
+        limit: Optional[int] = None,
+        module: Optional[str] = None,
+        report_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Same as the report_list MCP tool: find a report by `query`, or filter by module/type.
+
+        Example:
+            result = tools.report_list(query="receivables overdue")
+        """
+        from frappe_assistant_core.plugins.core.tools.report_list import ReportList
+
+        return self._run_mcp_tool(
+            ReportList, query=query, limit=limit, module=module, report_type=report_type
+        )
+
+    def report_requirements(
+        self,
+        report_name: str,
+        include_metadata: Optional[bool] = None,
+        include_columns: Optional[bool] = None,
+        include_filters: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """
+        Same as the report_requirements MCP tool: filters and columns a report needs.
+
+        Example:
+            info = tools.report_requirements("Sales Analytics")
+        """
+        from frappe_assistant_core.plugins.core.tools.report_requirements import ReportRequirements
+
+        return self._run_mcp_tool(
+            ReportRequirements,
+            report_name=report_name,
+            include_metadata=include_metadata,
+            include_columns=include_columns,
+            include_filters=include_filters,
+        )
+
+    def search_documents(
+        self,
+        query: str,
+        doctype: Optional[str] = None,
+        purpose: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Same as the search_documents MCP tool.
+
+        Example:
+            result = tools.search_documents("john", doctype="Customer")
+        """
+        from frappe_assistant_core.plugins.core.tools.search_documents import SearchDocuments
+
+        return self._run_mcp_tool(
+            SearchDocuments, query=query, doctype=doctype, purpose=purpose, filters=filters, limit=limit
+        )
+
     # ========== INTERNAL HELPERS ==========
+
+    @staticmethod
+    def _run_mcp_tool(tool_class, **arguments) -> Dict[str, Any]:
+        """Run an MCP tool with only the arguments the caller passed (None = use the tool default)."""
+        try:
+            return tool_class().execute({k: v for k, v in arguments.items() if v is not None})
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def _ensure_report_tools(self):
         """Lazy-load ReportTools to avoid circular imports"""
@@ -380,13 +503,17 @@ Available methods:
   • list_reports(module=None, report_type=None)
   • get_report_info(report_name)
   • generate_report(report_name, filters={}, format="json")
+  • report_list(query=None, limit=None, module=None, report_type=None)
+  • report_requirements(report_name)
 
 📄 Document Operations:
   • get_document(doctype, name)
   • get_documents(doctype, filters={}, fields=["*"], limit=100)
+  • list_documents(doctype, filters, fields, limit, offset, order_by, group_by, aggregate)
 
 🔍 Search Operations:
   • search(query, doctype=None, limit=20)
+  • search_documents(query, doctype=None, purpose=None, filters=None, limit=None)
 
 📋 Metadata Operations:
   • get_doctype_info(doctype)

@@ -51,11 +51,9 @@ class CorePlugin(BasePlugin):
             "update_document",
             "list_documents",
             "delete_document",
-            "submit_document",
-            # Search tools
+            "document_action",
+            # Search tools (one unified entry point; routes on doctype/purpose)
             "search_documents",
-            "search_doctype",
-            "search_link",
             # ChatGPT-compatible tools (wrappers for ChatGPT MCP requirements)
             "chatgpt_search",
             "chatgpt_fetch",
@@ -67,6 +65,14 @@ class CorePlugin(BasePlugin):
             "report_requirements",
             # Workflow tools
             "run_workflow",
+            "get_pending_approvals",
+            # Email
+            "send_email",
+            # Permission checks
+            "test_as_user",
+            # Builder checks
+            "sandbox_reference",
+            "recent_errors",
         ]
 
     def validate_environment(self):
@@ -91,6 +97,8 @@ class CorePlugin(BasePlugin):
                 "delete": True,
                 "list": True,
             },
+            # All three search modes are reached through the single
+            # search_documents tool.
             "search": {"global_search": True, "doctype_search": True, "link_search": True},
             "metadata": {
                 "doctype_info": True,

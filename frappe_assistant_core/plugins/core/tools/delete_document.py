@@ -24,7 +24,9 @@ from typing import Any, Dict
 import frappe
 from frappe import _
 
-from frappe_assistant_core.core.base_tool import BaseTool
+from frappe_assistant_core.core.base_tool import BaseTool, exception_message
+
+from .batch import MODE_SCHEMA, batch_refusal, run_batch
 
 
 class DocumentDelete(BaseTool):
@@ -40,7 +42,7 @@ class DocumentDelete(BaseTool):
     def __init__(self):
         super().__init__()
         self.name = "delete_document"
-        self.description = "Delete an existing Frappe document. Use when users want to remove a record from the system. Always check for dependencies before deletion."
+        self.description = "Delete an existing Frappe document. Use when users want to remove a record from the system. Always check for dependencies before deletion. To delete many records of one DocType, pass 'names' (at most 100) instead of 'name'."
         self.requires_permission = None  # Permission checked dynamically per DocType
 
         self.inputSchema = {
@@ -54,24 +56,63 @@ class DocumentDelete(BaseTool):
                     "type": "string",
                     "description": "The document name/ID to delete (e.g., 'CUST-00001', 'SINV-00001')",
                 },
+                "names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Instead of 'name': several records to delete.",
+                },
+                "mode": MODE_SCHEMA,
                 "force": {
                     "type": "boolean",
                     "default": False,
                     "description": "Force deletion even if there are dependencies. Use with caution.",
                 },
             },
-            "required": ["doctype", "name"],
+            "required": ["doctype"],
         }
 
     def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Delete an existing document"""
+        """Delete one document, or several from ``names``"""
         doctype = arguments.get("doctype")
-        name = arguments.get("name")
         force = arguments.get("force", False)
+        if ("name" in arguments) == ("names" in arguments):
+            return {
+                "success": False,
+                "error": _("Pass exactly one of 'name' or 'names'."),
+                "doctype": doctype,
+            }
 
-        # Check permission for DocType
-        if not frappe.has_permission(doctype, "delete"):
-            return {"success": False, "error": f"Insufficient permissions to delete {doctype} document"}
+        if "name" in arguments:
+            return self._delete_one(doctype, arguments["name"], force, commit=True)
+
+        names = arguments["names"]
+        mode = arguments.get("mode", "all_or_nothing")
+        refusal = batch_refusal(doctype, names, "names", mode)
+        if refusal:
+            return refusal
+        # A commit would end the batch savepoint, so all_or_nothing could not undo earlier deletes.
+        return run_batch(
+            doctype,
+            names,
+            lambda name: self._delete_one(doctype, name, force, commit=False),
+            lambda index, name: str(name),
+            mode,
+        )
+
+    def _delete_one(self, doctype: str, name: str, force: bool, commit: bool) -> Dict[str, Any]:
+        """Delete an existing document"""
+
+        # Same guard the other document tools use: blocks deletes of code-execution and
+        # schema/permission DocTypes, then defers to Frappe's own delete permission.
+        # Document-level permissions and the submitted-document check are enforced by
+        # frappe.delete_doc() below, so this stays at the DocType level (issue #249).
+        from frappe_assistant_core.core.security_config import validate_document_access
+
+        validation_result = validate_document_access(
+            user=frappe.session.user, doctype=doctype, name="", perm_type="delete"
+        )
+        if not validation_result["success"]:
+            return validation_result
 
         try:
             # Check if document exists
@@ -108,7 +149,8 @@ class DocumentDelete(BaseTool):
                 else:
                     frappe.delete_doc(doctype, name)
 
-                frappe.db.commit()
+                if commit:
+                    frappe.db.commit()
 
                 return {
                     "success": True,
@@ -126,15 +168,20 @@ class DocumentDelete(BaseTool):
                     "dependency_error": True,
                 }
             except frappe.PermissionError as perm_error:
+                # Frappe's document-level denial carries its reason in
+                # frappe.flags.error_message, not in the exception.
+                reason = exception_message(perm_error, _("Permission denied"))
                 return {
                     "success": False,
-                    "error": f"Insufficient permissions to delete {doctype} '{name}': {str(perm_error) or 'Permission denied'}",
+                    "error": f"Insufficient permissions to delete {doctype} '{name}': {reason}",
                     "doctype": doctype,
                     "name": name,
                     "permission_error": True,
                 }
             except Exception as delete_error:
-                error_msg = str(delete_error) or f"Unknown error occurred while deleting {doctype} '{name}'"
+                error_msg = exception_message(
+                    delete_error, f"Unknown error occurred while deleting {doctype} '{name}'"
+                )
                 return {
                     "success": False,
                     "error": error_msg,
@@ -144,8 +191,8 @@ class DocumentDelete(BaseTool):
                 }
 
         except Exception as e:
-            error_msg = (
-                str(e) or f"Unexpected error occurred while processing delete request for {doctype} '{name}'"
+            error_msg = exception_message(
+                e, f"Unexpected error occurred while processing delete request for {doctype} '{name}'"
             )
 
             frappe.log_error(
