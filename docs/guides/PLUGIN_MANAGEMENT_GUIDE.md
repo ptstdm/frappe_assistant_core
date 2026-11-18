@@ -69,6 +69,18 @@ plugins/
 
 ### Enabling/Disabling Plugins
 
+#### Who can switch plugins
+
+| User | Can do |
+|---|---|
+| Administrator | Enable or disable any plugin |
+| System Manager, Assistant Admin | Enable **Core** only; disable any plugin |
+| Anyone else | Nothing |
+
+The check runs when a FAC Plugin Configuration record is saved (`FACPluginConfiguration.validate`), so it applies to every path below. A refused change shows "Only Administrator can enable the ... plugin."
+
+Custom Tools also switches on the tools other apps register through the `assistant_tools` hook, so a site that needs those tools needs Administrator to enable it.
+
 #### From FAC Admin Page
 
 1. Go to **FAC Admin** page

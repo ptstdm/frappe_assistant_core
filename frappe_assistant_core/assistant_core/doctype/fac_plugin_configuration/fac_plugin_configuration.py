@@ -11,6 +11,11 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import cint
+
+# Plugins that System Manager / Assistant Admin may enable; the rest need Administrator.
+ALWAYS_ALLOWED_PLUGINS = {"core"}
+PLUGIN_MANAGER_ROLES = {"System Manager", "Assistant Admin"}
 
 
 class FACPluginConfiguration(Document):
@@ -28,6 +33,35 @@ class FACPluginConfiguration(Document):
         discovered_at: When this plugin was first discovered
         last_toggled_at: When this plugin was last enabled or disabled
     """
+
+    def validate(self):
+        self._check_toggle_permission()
+
+    def _check_toggle_permission(self):
+        """Every toggle path (FAC Admin, Settings, APIs, desk) saves this doc, so it is checked here."""
+        before = self.get_doc_before_save()
+        enabled = cint(self.enabled)
+        if before is not None and cint(before.enabled) == enabled:
+            return
+
+        user = frappe.session.user
+        if user == "Administrator":
+            return
+
+        # toggle_plugin_state and toggle_plugin_api have no role check of their own.
+        if not PLUGIN_MANAGER_ROLES.intersection(frappe.get_roles(user)):
+            frappe.throw(
+                _("Only System Manager or Assistant Admin can switch plugins on or off."),
+                frappe.PermissionError,
+            )
+
+        if enabled and self.plugin_name not in ALWAYS_ALLOWED_PLUGINS:
+            frappe.throw(
+                _("Only Administrator can enable the {0} plugin.").format(
+                    frappe.bold(self.display_name or self.plugin_name)
+                ),
+                frappe.PermissionError,
+            )
 
     def on_update(self):
         """Clear caches when plugin configuration changes."""
