@@ -48,7 +48,7 @@ class FACPluginConfiguration(Document):
         if user == "Administrator":
             return
 
-        # toggle_plugin_state and toggle_plugin_api have no role check of their own.
+        # The toggle endpoints check these roles too; this also covers direct saves.
         if not PLUGIN_MANAGER_ROLES.intersection(frappe.get_roles(user)):
             frappe.throw(
                 _("Only System Manager or Assistant Admin can switch plugins on or off."),
