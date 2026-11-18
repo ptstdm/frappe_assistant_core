@@ -47,6 +47,7 @@ PRIVILEGED_TOOLS = {
     "query_and_analyze",
     "run_database_query",
     "delete_document",
+    "document_action",  # can cancel, which reverses accounting and stock entries
 }
 
 # Tools that are always categorized as read_only (hardcoded list)
@@ -55,9 +56,7 @@ READ_ONLY_TOOLS = {
     "get_document",
     "list_documents",
     # Search tools
-    "search_documents",
-    "search_doctype",
-    "search_link",
+    "search_documents",  # all search modes: global, doctype-scoped, link_value
     "search",  # ChatGPT search
     "fetch",  # ChatGPT fetch
     # Metadata tools
@@ -73,10 +72,28 @@ READ_ONLY_TOOLS = {
     "workflow_status",
     # Data science tools (read-only analysis)
     "analyze_frappe_data",
-    "analyze_business_data",  # Only analyzes data, no modifications
     "extract_file_content",  # Only reads file content
     # Visualization tools (read-only)
     "list_user_dashboards",  # Only lists dashboards
+    # Insights tools (read dashboards and chart numbers as the user)
+    "list_insights_dashboards",
+    "get_insights_dashboard",
+    "get_insights_chart",
+    "get_crm_activity",  # Reads a CRM lead's/deal's timeline
+    "customisation_impact",  # Evaluates the dormancy rule; never writes
+    "test_as_user",  # Asks the permission rules; never saves or switches user
+    "sandbox_reference",  # Lists sandbox names; calls nothing
+    "recent_errors",  # Reads Error Log and Scheduled Job Log rows; never logs
+    "check_build_plan",  # Checks a build plan against the site; never writes
+    # Approval tools
+    "get_pending_approvals",  # Reads the workflow approval queue, no mutation
+    # Browser tools (read the page or move the user's view; no data mutation)
+    "browser_get_form_data",  # Reads form field values
+    "browser_get_page_context",  # Reads page type/doctype/DOM
+    "browser_take_screenshot",  # Captures the page
+    "browser_capture_diagnostics",  # Reads console/network buffers + captures the page
+    "browser_wait_for_page",  # Waits for load; no-op on data
+    "browser_navigate_to",  # Changes the viewed page only, not data
 }
 
 # Tools that are always categorized as write (hardcoded list)
@@ -84,12 +101,21 @@ WRITE_TOOLS = {
     # Document tools
     "create_document",
     "update_document",
-    "submit_document",
+    # Document generation (saves a private Frappe File — a create side effect)
+    "generate_document",  # Markdown -> PDF saved as a File record; NOT read-only
+    # Attaches a chat upload to a document (creates a File record on the target)
+    "attach_chat_file",
     # Workflow tools
     "run_workflow",
     # Visualization tools (create/modify)
     "create_dashboard",
     "create_dashboard_chart",
+    # Communication tools (external, irreversible side effect)
+    "send_email",
+    "reply_to_helpdesk_ticket",
+    "send_crm_email",
+    "convert_crm_lead",
+    "add_crm_activity",
 }
 
 
@@ -232,6 +258,46 @@ def detect_tool_category(tool_instance) -> str:
         Category string: 'read_only', 'write', 'read_write', or 'privileged'
     """
     return get_detector().detect_category(tool_instance)
+
+
+def category_to_annotations(category: str) -> dict:
+    """
+    Translate a FAC tool category into MCP tool annotation hints.
+
+    MCP clients (e.g. Claude Desktop) group tools and choose default approval
+    behavior from these behavioral hints in the tools/list response. Without
+    them every tool lands in a single "Other tools" bucket. The FAC category
+    (stored on FAC Tool Configuration, admin-overridable) is the single source
+    of truth, so the admin page and the client stay in sync.
+
+    Mapping (per MCP spec; destructiveHint is only meaningful when
+    readOnlyHint is false):
+        read_only  -> {"readOnlyHint": True}                  (Read-only group)
+        write      -> {"readOnlyHint": False}                 (Write/delete group)
+        read_write -> {"readOnlyHint": False}                 (Write/delete group)
+        privileged -> {"readOnlyHint": False, "destructiveHint": True}
+
+    Args:
+        category: One of read_only, write, read_write, privileged
+            ("dangerous" is accepted as a legacy alias for privileged).
+
+    Returns:
+        Dict of MCP annotation hints. Empty dict for an unknown category, so an
+        unrecognized value degrades to "no hints" rather than a wrong hint.
+    """
+    if category == "dangerous":  # legacy alias
+        category = "privileged"
+
+    if category == "read_only":
+        return {"readOnlyHint": True}
+    if category == "write":
+        return {"readOnlyHint": False}
+    if category == "read_write":
+        return {"readOnlyHint": False}
+    if category == "privileged":
+        return {"readOnlyHint": False, "destructiveHint": True}
+
+    return {}
 
 
 def get_category_info(category: str) -> dict:

@@ -10,6 +10,9 @@
   "server_enabled",
   "mcp_endpoint_url",
   "oauth_discovery_url",
+  "fac_chat_tab",
+  "fac_chat_description",
+  "enable_fac_chat",
   "plugins_tab",
   "plugins_section",
   "enabled_plugins_list",
@@ -41,6 +44,8 @@
   "mcp_server_name",
   "mcp_protocol_version",
   "mcp_transport_type",
+  "skills_section",
+  "skill_mode",
   "oauth_tab",
   "oauth_authorization_section",
   "enable_dynamic_client_registration",
@@ -82,6 +87,23 @@
    "label": "OAuth Discovery URL",
    "read_only": 1,
    "description": "OAuth/OIDC discovery endpoint for auto-configuration. MCP clients use this to discover authentication endpoints."
+  },
+  {
+   "fieldname": "fac_chat_tab",
+   "fieldtype": "Tab Break",
+   "label": "FAC Chat"
+  },
+  {
+   "fieldname": "fac_chat_description",
+   "fieldtype": "HTML",
+   "options": "<p>Opt-in in-Frappe chat UI powered by FAC Cloud. Adds a widget on every Desk page and a <code>/copilot</code> SPA. The MCP server (BYO-LLM) keeps running either way.</p>"
+  },
+  {
+   "default": "0",
+   "description": "Toggles on/off immediately — no restart needed.",
+   "fieldname": "enable_fac_chat",
+   "fieldtype": "Check",
+   "label": "Enable FAC Chat"
   },
   {
    "fieldname": "plugins_tab",
@@ -149,8 +171,8 @@
    "fieldname": "code_execution_max_recursion",
    "fieldtype": "Int",
    "label": "Max Recursion Depth",
-   "default": "100",
-   "description": "Maximum recursion depth allowed. Prevents stack overflow from deeply recursive code. Range: 50-500."
+   "default": "500",
+   "description": "Maximum recursion depth allowed. Prevents stack overflow from deeply recursive code. Range: 50-1000. Frappe internals (frappe.get_doc, frappe.get_all) recurse well past 100, so keep this at the default unless you have a reason to lower it."
   },
   {
    "fieldname": "execution_limits_info",
@@ -188,7 +210,7 @@
    "fieldname": "ocr_backend",
    "fieldtype": "Select",
    "label": "OCR Backend",
-   "options": "paddleocr\nollama"
+   "options": "paddleocr\nollama\ntesseract"
   },
   {
    "default": "en",
@@ -284,6 +306,19 @@
    "read_only": 1,
    "default": "StreamableHTTP",
    "description": "Transport protocol used for MCP communication. StreamableHTTP enables OAuth-based authentication."
+  },
+  {
+   "fieldname": "skills_section",
+   "fieldtype": "Section Break",
+   "label": "Skills Configuration"
+  },
+  {
+   "default": "supplementary",
+   "description": "Supplementary: tools keep full descriptions, skills provide additional guidance. Replace: tool descriptions are minimized when a skill exists, saving tokens.",
+   "fieldname": "skill_mode",
+   "fieldtype": "Select",
+   "label": "Skill Mode",
+   "options": "supplementary\nreplace"
   },
   {
    "fieldname": "oauth_tab",

@@ -14,11 +14,27 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import Any, Dict
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
 
 from frappe_assistant_core.assistant_core.server import assistantServer
+
+
+def _icon(lucide_name: str, fa_class: str) -> str:
+    """Icon markup for Desk HTML.
+
+    Frappe 16 removed Font Awesome and draws icons from its Lucide sprite; Frappe 15 has
+    no Lucide sprite but still bundles Font Awesome 4.7.
+    """
+    if int(frappe.__version__.split(".")[0]) >= 16:
+        return (
+            '<svg class="icon icon-sm" style="--icon-stroke: currentColor; vertical-align: -0.125em;"'
+            f' aria-hidden="true"><use href="#icon-{lucide_name}"></use></svg>'
+        )
+    return f'<i class="fa {fa_class}" aria-hidden="true"></i>'
 
 
 class AssistantCoreSettings(Document):
@@ -52,7 +68,7 @@ class AssistantCoreSettings(Document):
             # Enable API with new settings
             self.enable_assistant_api()
 
-            frappe.msgprint("assistant MCP API restarted successfully")
+            frappe.msgprint(_("Assistant MCP API restarted successfully"))
 
         except Exception as e:
             frappe.log_error(f"Failed to restart assistant MCP API: {str(e)}")
@@ -164,7 +180,9 @@ class AssistantCoreSettings(Document):
             if server_was_enabled or not server.running:
                 # Enable API if it was just enabled or not running
                 frappe.enqueue(
-                    "frappe_assistant_core.assistant_core.server.enable_background_api", queue="short"
+                    "frappe_assistant_core.assistant_core.server.enable_background_api",
+                    queue="short",
+                    enqueue_after_commit=True,
                 )
         else:
             if server_was_enabled and server.running:
@@ -213,7 +231,7 @@ class AssistantCoreSettings(Document):
                 <div class="row align-items-center">
                     <div class="col-md-8">
                         <h5 class="mb-2" style="color: var(--heading-color);">
-                            <i class="fa fa-cogs"></i> Plugin System Status
+                            {_icon("settings-2", "fa-cogs")} Plugin System Status
                         </h5>
                         <div class="row">
                             <div class="col-md-4">
@@ -229,21 +247,21 @@ class AssistantCoreSettings(Document):
                             <div class="col-md-4">
                                 <strong>Status:</strong>
                                 <span style="color: var(--green-600);">
-                                    <i class="fa fa-check-circle"></i> Operational
+                                    {_icon("circle-check", "fa-check-circle")} Operational
                                 </span>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-4 text-right">
                         <a href="/app/fac-admin" class="btn btn-primary btn-sm">
-                            <i class="fa fa-external-link-alt"></i> Open FAC Admin
+                            {_icon("external-link", "fa-external-link")} Open FAC Admin
                         </a>
                     </div>
                 </div>
             </div>
 
             <div class="p-3 rounded" style="background: var(--card-bg); border: 1px solid var(--border-color);">
-                <h6 style="color: var(--heading-color);"><i class="fa fa-puzzle-piece"></i> Plugins</h6>
+                <h6 style="color: var(--heading-color);">{_icon("puzzle", "fa-puzzle-piece")} Plugins</h6>
                 <div class="row mt-3">
             """
 
@@ -276,11 +294,11 @@ class AssistantCoreSettings(Document):
                     </div>
                 """
 
-            html += """
+            html += f"""
                 </div>
                 <div class="mt-3 pt-2" style="border-top: 1px solid var(--border-color);">
                     <small style="color: var(--text-muted);">
-                        <i class="fa fa-info-circle"></i>
+                        {_icon("info", "fa-info-circle")}
                         For individual tool management, role-based access control, and category filtering,
                         use the <a href="/app/fac-admin">FAC Admin</a> page.
                     </small>
@@ -297,7 +315,7 @@ class AssistantCoreSettings(Document):
             }
 
     @frappe.whitelist()
-    def toggle_plugin(self, plugin_name, action):
+    def toggle_plugin(self, plugin_name: str, action: str) -> Dict[str, Any]:
         """Enable or disable a plugin"""
         try:
             from frappe_assistant_core.utils.plugin_manager import PluginError, get_plugin_manager
@@ -332,7 +350,6 @@ class AssistantCoreSettings(Document):
 # Use StreamableHTTP (OAuth-based) transport instead
 
 
-@frappe.whitelist()
 def toggle_plugin_api(plugin_name: str, action: str):
     """
     Standalone API to enable or disable a plugin.
