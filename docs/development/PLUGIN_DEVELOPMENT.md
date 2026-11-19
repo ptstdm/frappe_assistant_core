@@ -35,6 +35,20 @@ plugins/
 5. **Execution**: Plugin tools available for use
 6. **Unloading**: Plugin disabled and resources cleaned up
 
+### Who Can Enable a Plugin
+
+Each plugin's on/off state is a **FAC Plugin Configuration** record. Every way of switching a plugin (FAC Admin, Assistant Core Settings, the plugin APIs, the desk form) saves that record, and its `validate` decides who may change `enabled`:
+
+| User | Can do |
+|---|---|
+| Administrator | Enable or disable any plugin |
+| System Manager, Assistant Admin | Enable **Core** only; disable any plugin |
+| Anyone else | Nothing |
+
+A refused change shows "Only Administrator can enable the ... plugin." Saving a plugin without changing `enabled` is always allowed, so plugins that are already on stay on.
+
+Custom Tools also switches on the tools other apps register through the `assistant_tools` hook, so a site that needs those tools needs Administrator to enable it.
+
 ## Creating a Plugin
 
 ### Step 1: Plugin Directory Setup
