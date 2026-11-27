@@ -57,7 +57,15 @@ class AssistantCoreSettings(Document):
     def validate(self):
         """Validate settings before saving"""
         # Plugin validation is handled by plugin manager
-        pass
+        self._fill_usage_limit_defaults()
+
+    def _fill_usage_limit_defaults(self):
+        """Show the limit that applies: a blank or 0 limit is saved as its default."""
+        from frappe_assistant_core.utils.usage_limits import DEFAULT_LIMITS
+
+        for fieldname, default in DEFAULT_LIMITS.items():
+            if not frappe.utils.cint(self.get(fieldname)):
+                self.set(fieldname, default)
 
     def restart_assistant_core(self):
         """Restart the assistant MCP API with new settings"""

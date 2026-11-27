@@ -16,6 +16,7 @@ This directory contains documentation that ships **with the code** — either be
 - **[SKILLS_DEVELOPER_GUIDE.md](development/SKILLS_DEVELOPER_GUIDE.md)** — ship markdown skills via the `assistant_skills` hook
 - **[TEST_CASE_CREATION_GUIDE.md](development/TEST_CASE_CREATION_GUIDE.md)** — test patterns and conventions
 - **[OAUTH_CORS_CONFIGURATION.md](development/OAUTH_CORS_CONFIGURATION.md)** — CORS configuration for browser-based MCP clients (development only)
+- **[USAGE_LIMITS.md](development/USAGE_LIMITS.md)** — per-user limits on MCP tool calls, and the Rate Limited audit rows they write
 - **[PRE_COMMIT_SETUP.md](development/PRE_COMMIT_SETUP.md)** — local pre-commit hook setup
 - **[RELEASE_GUIDE.md](development/RELEASE_GUIDE.md)** — release and versioning workflow
 

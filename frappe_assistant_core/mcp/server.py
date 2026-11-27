@@ -404,6 +404,14 @@ class MCPServer:
         tool = tool_registry[tool_name]
         fn = tool["fn"]
 
+        # Counted only once the tool exists, so a mistyped name never uses up a user's limit.
+        from frappe_assistant_core.utils import usage_limits
+
+        ticket = usage_limits.before_call()
+        usage_limits.record_limit_hit(ticket, tool_name, arguments)
+        if ticket.refused:
+            return {"content": [{"type": "text", "text": ticket.message}], "isError": True}
+
         try:
             # Execute tool
             frappe.logger().info(f"MCP Executing tool: {tool_name}")
@@ -475,6 +483,9 @@ class MCPServer:
             frappe.logger().error(f"MCP Tool Execution Error: {error_text}\n{traceback.format_exc()}")
 
             return {"content": [{"type": "text", "text": error_text}], "isError": True}
+
+        finally:
+            usage_limits.after_call(ticket)
 
     def _success_response(self, response: Response, request_id: Any, result: Dict) -> Response:
         """Create JSON-RPC success response."""
