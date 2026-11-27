@@ -324,18 +324,29 @@ def invalidate_settings_cache(doc=None, method=None):
     frappe.cache.set_value("settings_modified", frappe.utils.now(), expires_in_sec=3600)
 
 
+# Clearing scans Redis keys and runs after every audit row, so it runs at most once per interval.
+DASHBOARD_INVALIDATION_INTERVAL_SECONDS = 60
+
+
 def invalidate_dashboard_cache(doc=None, method=None):
-    """Invalidate dashboard-related caches
+    """Clear the dashboard's tool statistics after new audit rows, at most once a minute.
 
     Args:
         doc: Document instance (passed by hooks)
         method: Method name (passed by hooks)
     """
-    # Clear all user-specific dashboard caches
-    frappe.cache.delete_keys("get_cached_dashboard_stats_*")
-    frappe.cache.delete_keys("assistant_dashboard_*")
-    frappe.cache.delete_key("get_cached_most_used_tools")
-    frappe.cache.delete_key("get_cached_category_performance")
+    try:
+        key = frappe.cache.make_key("fac_dashboard_cache_cleared")
+        pipe = frappe.cache.pipeline(transaction=False)
+        pipe.incr(key)
+        pipe.expire(key, DASHBOARD_INVALIDATION_INTERVAL_SECONDS)
+        if pipe.execute()[0] > 1:
+            return
+        get_cached_most_used_tools.clear_cache()
+        get_cached_category_performance.clear_cache()
+    except Exception:
+        # The statistics expire on their own TTL; never fail the audit row over them.
+        frappe.logger("cache").warning("Dashboard cache not cleared", exc_info=True)
 
 
 def invalidate_tool_registry_cache():
