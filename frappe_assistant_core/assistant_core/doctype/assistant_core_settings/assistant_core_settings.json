@@ -25,6 +25,15 @@
   "code_execution_max_cpu_seconds",
   "code_execution_max_recursion",
   "execution_limits_info",
+  "usage_limits_section",
+  "enable_usage_limits",
+  "usage_limit_mode",
+  "max_calls_per_user_per_day",
+  "max_calls_per_user_per_minute",
+  "usage_limits_column_break",
+  "max_tool_seconds_per_user_per_day",
+  "max_concurrent_calls_per_user",
+  "max_concurrent_calls_per_site",
   "audit_log_section",
   "audit_log_retention_days",
   "ocr_tab",
@@ -179,6 +188,70 @@
    "fieldtype": "HTML",
    "label": "Limits Info",
    "options": "<div class=\"alert alert-info\" style=\"margin-top: 10px;\"><strong>Note:</strong> These limits use OS-level resource controls (signals, rlimit) and only work on Unix-like systems (Linux, macOS). On Windows, limits are not enforced. Changes take effect immediately for new code executions.</div>"
+  },
+  {
+   "description": "Per-user limits on MCP tool calls from Claude, ChatGPT and other clients, so one user cannot slow down a shared server. Counted per site; Administrator is never limited. A limit left at 0 uses its default.",
+   "fieldname": "usage_limits_section",
+   "fieldtype": "Section Break",
+   "label": "Usage Limits"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_usage_limits",
+   "fieldtype": "Check",
+   "label": "Enable Usage Limits"
+  },
+  {
+   "default": "Block",
+   "description": "Block refuses a call over a limit and tells the client why. Log only lets it run. Both write a Rate Limited row to the Assistant Audit Log, at most one a minute per user and limit.",
+   "fieldname": "usage_limit_mode",
+   "fieldtype": "Select",
+   "label": "Usage Limit Mode",
+   "options": "Block\nLog only"
+  },
+  {
+   "default": "3000",
+   "description": "Resets at midnight, site time. Default 3000.",
+   "fieldname": "max_calls_per_user_per_day",
+   "fieldtype": "Int",
+   "label": "Max Calls per User per Day",
+   "non_negative": 1
+  },
+  {
+   "default": "60",
+   "description": "Default 60.",
+   "fieldname": "max_calls_per_user_per_minute",
+   "fieldtype": "Int",
+   "label": "Max Calls per User per Minute",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "usage_limits_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "7200",
+   "description": "Total time the user's tool calls ran today. Default 7200 (2 hours).",
+   "fieldname": "max_tool_seconds_per_user_per_day",
+   "fieldtype": "Int",
+   "label": "Max Tool Seconds per User per Day",
+   "non_negative": 1
+  },
+  {
+   "default": "6",
+   "description": "Tool calls running at the same moment. Default 6.",
+   "fieldname": "max_concurrent_calls_per_user",
+   "fieldtype": "Int",
+   "label": "Max Concurrent Calls per User",
+   "non_negative": 1
+  },
+  {
+   "default": "12",
+   "description": "All users together. Default 12.",
+   "fieldname": "max_concurrent_calls_per_site",
+   "fieldtype": "Int",
+   "label": "Max Concurrent Calls per Site",
+   "non_negative": 1
   },
   {
    "fieldname": "audit_log_section",
@@ -414,7 +487,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-01-21 10:00:00.000000",
+ "modified": "2026-11-27 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Assistant Core",
  "name": "Assistant Core Settings",

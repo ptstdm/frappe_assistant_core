@@ -25,11 +25,13 @@ AUDIT_STATUS_SUCCESS = "Success"
 AUDIT_STATUS_ERROR = "Error"
 AUDIT_STATUS_TIMEOUT = "Timeout"
 AUDIT_STATUS_PERMISSION_DENIED = "Permission Denied"
+AUDIT_STATUS_RATE_LIMITED = "Rate Limited"
 _VALID_STATUSES = {
     AUDIT_STATUS_SUCCESS,
     AUDIT_STATUS_ERROR,
     AUDIT_STATUS_TIMEOUT,
     AUDIT_STATUS_PERMISSION_DENIED,
+    AUDIT_STATUS_RATE_LIMITED,
 }
 
 # Output data is stored as JSON text in a Code field; cap to keep audit rows
@@ -79,7 +81,7 @@ def log_tool_execution(
         user: User who executed the tool
         arguments: Tool arguments (sensitive data should be pre-sanitized; the
             sink re-sanitizes defensively)
-        status: One of "Success", "Error", "Timeout", "Permission Denied".
+        status: One of "Success", "Error", "Timeout", "Permission Denied", "Rate Limited".
             Unknown values are coerced to "Error" with a warning.
         execution_time: Time taken in seconds
         source_app: App that provides the tool
