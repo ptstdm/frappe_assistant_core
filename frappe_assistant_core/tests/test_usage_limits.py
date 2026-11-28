@@ -16,6 +16,7 @@
 
 """Per-user MCP usage limits, driven through MCPServer._handle_tools_call as a client's call is."""
 
+import time
 from typing import Any, Dict
 from unittest.mock import patch
 
@@ -40,9 +41,11 @@ class _CountingTool(BaseTool):
         self.requires_permission = None  # skip the DocType permission check
         self.source_app = "frappe_assistant_core"
         self.runs = 0
+        self.run_seconds = 0.0
 
     def execute(self, arguments: Dict[str, Any]) -> Any:
         self.runs += 1
+        time.sleep(self.run_seconds)
         return {"ok": True}
 
     def log_execution(self, *args, **kwargs):
@@ -181,9 +184,11 @@ class TestUsageLimits(BaseAssistantTest):
         self.assertEqual(self._counter("in_flight", usage_limits.SITE), 0)
 
     def test_tool_time_is_added_up_and_limited(self):
+        # A real tool takes time; this one returns in under a millisecond, which rounds to 0.
+        self.tool.run_seconds = 0.02
         self._call(_limits())
         seconds_key = usage_limits._key("seconds", frappe.utils.nowdate(), self.user)
-        self.assertGreater(frappe.cache.incrbyfloat(seconds_key, 0), 0)
+        self.assertGreaterEqual(frappe.cache.incrbyfloat(seconds_key, 0), 0.02)
 
         frappe.cache.incrbyfloat(seconds_key, 10)
         result = self._call(_limits(tool_seconds_per_day=10))
